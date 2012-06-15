@@ -7,6 +7,7 @@ module Mongoid
     included do
       scope :recent, desc(:_id)
       scope :exclude_ids, Proc.new { |ids| where(:_id.nin => ids.map(&:to_i)) }
+      scope :by_week, where(:created_at.gte => 7.days.ago.utc)
     end
 
     module ClassMethods
@@ -32,6 +33,14 @@ module Mongoid
           objects = self.limit(batch_size).skip(start)
         end
       end
+
+      def delay
+        Sidekiq::Extensions::Proxy.new(DelayedDocument, self)
+      end
+    end
+
+    def delay
+      Sidekiq::Extensions::Proxy.new(DelayedDocument, self)
     end
   end
 end

@@ -1,6 +1,5 @@
 # coding: utf-8
 require File.expand_path('../boot', __FILE__)
-APP_VERSION = '0.6'
 
 require "action_controller/railtie"
 require "action_mailer/railtie"
@@ -47,8 +46,8 @@ module RubyChina
       g.test_framework :rspec
       g.fixture_replacement :factory_girl, :dir => "spec/factories"
     end
-    
-    config.to_prepare { 
+
+    config.to_prepare {
       Devise::Mailer.layout "mailer"
     }
   end
@@ -56,7 +55,7 @@ end
 
 I18n.locale = 'zh-CN'
 
-require 'yaml'
-YAML::ENGINE.yamler= 'syck'
+# require 'yaml'
+# YAML::ENGINE.yamler= 'syck'
 
 

@@ -12,18 +12,25 @@ window.Topics =
     txtBox.val(before_text + src_merged + source.slice(caret_pos+1, source.count))
     txtBox.caretPos(caret_pos+src_merged.length)
     txtBox.focus()
-    $("#add_image").jDialog.close()
 
   # 上传图片
-  addImageClick : () ->
+  initUploader : () ->
+    $("#topic_add_image").bind "click", () ->
+      $("#topic_upload_images").click()
+      return false
+
     opts =
-      title:"插入图片"
-      width: 350
-      height: 145
-      content: '<iframe src="/photos/tiny_new" frameborder="0" style="width:330px; height:145px;"></iframe>',
-      close_on_body_click : false
-    
-    $("#add_image").jDialog(opts)
+      url : "/photos"
+      type : "POST"
+      beforeSend : () ->
+        $("#topic_add_image").hide()
+        $("#topic_add_image").before("<span class='loading'>上传中...</span>")
+      success : (result, status, xhr) ->
+        $("#topic_add_image").parent().find("span").remove()
+        $("#topic_add_image").show()
+        Topics.appendImageFromUpload([result])
+
+    $("#topic_upload_images").fileUpload opts
     return false
 
   # 回复
@@ -49,6 +56,7 @@ window.Topics =
       $("abbr.timeago",$("#replies .reply").last()).timeago()
       $("abbr.timeago",$("#replies .total")).timeago()
       $("#new_reply textarea").val('')
+      $("#preview").text('')
       App.notice(msg,'#reply')
     else
       App.alert(msg,'#reply')
@@ -99,11 +107,11 @@ window.Topics =
             return msg
       else
         $(window).unbind("beforeunload")
-        
+
   favorite : (el) ->
     topic_id = $(el).data("id")
-    if $(el).hasClass("small_flaged")
-      hash = 
+    if $(el).hasClass("small_bookmarked")
+      hash =
         type : "unfavorite"
       $.ajax
        url : "/topics/#{topic_id}/favorite"
@@ -111,21 +119,41 @@ window.Topics =
        type : "POST"
        success : ->
          $(el).attr("title","收藏")
-         $(el).attr("class","icon small_flag")
+         $(el).attr("class","icon small_bookmark")
     else
       $.ajax
        url : "/topics/#{topic_id}/favorite"
        type : "POST"
        success : ->
          $(el).attr("title","取消收藏")
-         $(el).attr("class","icon small_flaged")
+         $(el).attr("class","icon small_bookmarked")
     false
-    
+
+  follow : (el) ->
+    topic_id = $(el).data("id")
+    followed = $(el).data("followed")
+    if followed 
+      $.ajax
+        url : "/topics/#{topic_id}/unfollow"
+        type : "POST"
+        success : (res) ->
+          $(el).data("followed", false)
+          $("i",el).attr("class", "icon small_follow")
+    else
+      $.ajax
+        url : "/topics/#{topic_id}/follow"
+        type : "POST"
+        success : (res) ->
+          $(el).data("followed", true)
+          $("i",el).attr("class", "icon small_followed")
+    false
+
+
 # pages ready
 $(document).ready ->
   $("textarea").bind "keydown","ctrl+return",(el) ->
     if $(el.target).val().trim().length > 0
-      $("#reply form").submit()
+      $("#reply > form").submit()
     return false
 
   Topics.initCloseWarning($("textarea.closewarning"))
@@ -135,14 +163,16 @@ $(document).ready ->
   $("#new_reply").submit () ->
     $('#btn_reply').button('loading')
 
+  Topics.initUploader()
+
   $("a.at_floor").live 'click', () ->
     Topics.hightlightReply($(this).data("floor"))
 
   $("a.small_reply").live 'click', () ->
     Topics.reply($(this).data("floor"), $(this).data("login"))
-  
+
   Topics.hookPreview($(".editor_toolbar"), $(".topic_editor"))
-  
+
   $("body").bind "keydown", "m", (el) ->
     $('#markdown_help_tip_modal').modal
       keyboard : true
@@ -154,15 +184,18 @@ $(document).ready ->
   login_exists = []
   if $("#topic_show .leader .name a").length > 0
     author_val =
-      login : $("#topic_show .leader .name a").text(), 
+      login : $("#topic_show .leader .name a").text(),
       name : $("#topic_show .leader .name a").data('name')
     logins.push(author_val)
     login_exists.push(author_val.login)
   $('#replies span.name a').each (idx) ->
-    val = 
+    val =
       login : $(this).text()
       name : $(this).data('name')
     if $.inArray(val.login,login_exists) < 0
       login_exists.push(val.login)
       logins.push(val)
   App.atReplyable("textarea", logins)
+
+  # Focus title field in new-topic page
+  $("body.topics-controller.new-action #topic_title").focus()

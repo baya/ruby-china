@@ -16,8 +16,9 @@ class Site
   belongs_to :user
 
   validates_presence_of :url, :name, :site_node_id
-  
+
   index :url
+  index :site_node_id
 
   before_validation :fix_urls, :check_uniq
   def fix_urls
@@ -34,7 +35,7 @@ class Site
       self.url = "http://#{url}"
     end
   end
-  
+
   def check_uniq
     if Site.unscoped.or(:url => url).count > 0
       self.errors.add(:url,"已经提交过了。")

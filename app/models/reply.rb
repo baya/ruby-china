@@ -7,12 +7,13 @@ class Reply
   include Mongoid::CounterCache
   include Mongoid::SoftDelete
   include Mongoid::MarkdownBody
+  include Mongoid::Mentionable
+  include Mongoid::Likeable
 
   field :body
   field :body_html
   field :source
   field :message_id
-  field :mentioned_user_ids, :type => Array, :default => []
 
   belongs_to :user, :inverse_of => :replies
   belongs_to :topic, :inverse_of => :replies
@@ -37,41 +38,41 @@ class Reply
   after_update :update_parent_topic_updated_at
   def update_parent_topic_updated_at
     if not self.topic.blank?
-      self.topic.update_attribute(:updated_at, Time.now)
+      self.topic.delay.set(:updated_at, Time.now)
     end
   end
 
-  before_save :extract_mentioned_users
-  def extract_mentioned_users
-    logins = body.scan(/@(\w{3,20})/).flatten
-    if logins.any?
-      self.mentioned_user_ids = User.where(:login => /^(#{logins.join('|')})$/i, :_id.ne => user.id).limit(5).only(:_id).map(&:_id).to_a
+  after_create do
+    Reply.delay.send_topic_reply_notification(self.id)
+  end
+
+  def self.send_topic_reply_notification(reply_id)
+    reply = Reply.find_by_id(reply_id)
+    topic = reply.topic
+    # 给发帖人发回帖通知
+    if reply.user != topic.user && !reply.mentioned_user_ids.include?(topic.user_id)
+      Notification::TopicReply.create :user_id => topic.user_id, :reply_id => reply.id
+      reply.notified_user_ids << topic.user_id
+    end
+
+    # 给关注者发通知
+    topic.follower_ids.each do |uid|
+      # 排除同一个回复过程中已经提醒过的人
+      next if reply.notified_user_ids.include?(uid)
+      # 排除回帖人
+      next if uid == reply.user_id
+      Notification::TopicReply.create :user_id => uid, :reply_id => reply.id
     end
   end
 
-  def mentioned_user_logins
-    # 用于作为缓存 key
-    ids_md5 = Digest::MD5.hexdigest(self.mentioned_user_ids.to_s)
-    Rails.cache.fetch("reply:#{self.id}:mentioned_user_logins:#{ids_md5}") do
-      User.where(:_id.in => self.mentioned_user_ids).only(:login).map(&:login)
-    end
-  end
-
-  after_create :send_mention_notification, :send_topic_reply_notification
-  def send_mention_notification
-    self.mentioned_user_ids.each do |user_id|
-      Notification::Mention.create :user_id => user_id, :reply => self
-    end
-  end
-
-  def send_topic_reply_notification
-    if self.user != topic.user && !mentioned_user_ids.include?(topic.user_id)
-      Notification::TopicReply.create :user => topic.user, :reply => self
-    end
+  # 是否热门
+  def popular?
+    self.likes_count >= 10
   end
 
   def destroy
     super
     notifications.delete_all
+    delete_notifiaction_mentions
   end
 end

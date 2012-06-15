@@ -1,14 +1,14 @@
 # coding: utf-8
 class TopicsController < ApplicationController
 
-  load_and_authorize_resource :only => [:new,:edit,:create,:update,:destroy,:favorite]
+  load_and_authorize_resource :only => [:new,:edit,:create,:update,:destroy,:favorite, :follow, :unfollow]
 
   before_filter :set_menu_active
   caches_page :feed, :node_feed, :expires_in => 1.hours
   before_filter :init_base_breadcrumb
 
   def index
-    @topics = Topic.last_actived.fields_for_list.limit(15).includes(:user)
+    @topics = Topic.last_actived.without_hide_nodes.fields_for_list.includes(:user).paginate(:page => params[:page], :per_page => 15, :total_entries => 1500)
     set_seo_meta("","#{Setting.app_name}#{t("menu.topics")}")
     drop_breadcrumb(t("topics.hot_topic"))
     #render :stream => true
@@ -22,7 +22,7 @@ class TopicsController < ApplicationController
 
   def node
     @node = Node.find(params[:id])
-    @topics = @node.topics.last_actived.fields_for_list.includes(:user).paginate(:page => params[:page],:per_page => 50)
+    @topics = @node.topics.last_actived.fields_for_list.includes(:user).paginate(:page => params[:page],:per_page => 15)
     set_seo_meta("#{@node.name} &raquo; #{t("menu.topics")}","#{Setting.app_name}#{t("menu.topics")}#{@node.name}",@node.summary)
     drop_breadcrumb("#{@node.name}")
     render :action => "index" #, :stream => true
@@ -37,17 +37,13 @@ class TopicsController < ApplicationController
 
   def recent
     # TODO: 需要 includes :node,:user, :last_reply_user,但目前用了 paginate 似乎会使得 includes 没有效果
-    @topics = Topic.recent.fields_for_list.includes(:user).paginate(:page => params[:page], :per_page => 50)
+    @topics = Topic.recent.fields_for_list.includes(:user).paginate(:page => params[:page], :per_page => 15, :total_entries => 1500)
     drop_breadcrumb(t("topics.topic_list"))
     render :action => "index" #, :stream => true
   end
 
-  def search
-    result = Redis::Search.query("Topic", params[:key], :limit => 500)
-    ids = result.collect { |r| r["id"] }
-    @topics = Topic.where(:_id.in => ids).limit(50).includes(:node,:user, :last_reply_user)
-    set_seo_meta("#{t("common.search")}#{params[:s]} &raquo; #{t("menu.topics")}")
-    drop_breadcrumb("#{t("common.search")} #{params[:key]}")
+  def no_reply
+    @topics = Topic.no_reply.recent.fields_for_list.includes(:user).paginate(:page => params[:page], :per_page => 15)
     render :action => "index" #, :stream => true
   end
 
@@ -57,12 +53,15 @@ class TopicsController < ApplicationController
     @node = @topic.node
     @replies = @topic.replies.without_body.asc(:_id).all.includes(:user).reject { |r| r.user.blank? }
     if current_user
-      current_user.read_topic(@topic)
-      # TODO: 此处导致每次查看帖子都会执行 update 需要改进
-      current_user.notifications.where(:reply_id.in => @replies.map(&:id), :read => false).update_all(:read => true)
+      unless current_user.topic_read?(@topic)
+        current_user.notifications.unread.any_of({:mentionable_type => 'Topic', :mentionable_id => @topic.id},
+                                                 {:mentionable_type => 'Reply', :mentionable_id.in => @replies.map(&:id)},
+                                                 {:reply_id.in => @replies.map(&:id)}).update_all(:read => true)
+        current_user.read_topic(@topic)
+      end
     end
     set_seo_meta("#{@topic.title} &raquo; #{t("menu.topics")}")
-    drop_breadcrumb("#{@node.name}", node_topics_path(@node.id))
+    drop_breadcrumb("#{@node.try(:name)}", node_topics_path(@node.try(:id)))
     drop_breadcrumb t("topics.read_topic")
    # render :stream => true
   end
@@ -129,13 +128,25 @@ class TopicsController < ApplicationController
     @topic.destroy_by(current_user)
     redirect_to(topics_path, :notice => t("topics.delete_topic_success"))
   end
-  
+
   def favorite
     if params[:type] == "unfavorite"
       current_user.unfavorite_topic(params[:id])
     else
       current_user.favorite_topic(params[:id])
     end
+    render :text => "1"
+  end
+
+  def follow
+    @topic = Topic.find(params[:id])
+    @topic.push_follower(current_user.id)
+    render :text => "1"
+  end
+
+  def unfollow
+    @topic = Topic.find(params[:id])
+    @topic.pull_follower(current_user.id)
     render :text => "1"
   end
 

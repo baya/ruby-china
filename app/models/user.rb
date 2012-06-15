@@ -19,7 +19,9 @@ class User
   field :location_id, :type => Integer
   field :bio
   field :website
+  field :company
   field :github
+  field :twitter
   # 是否信任用户
   field :verified, :type => Boolean, :default => true
   field :state, :type => Integer, :default => 1
@@ -27,7 +29,6 @@ class User
   field :tagline
   field :topics_count, :type => Integer, :default => 0
   field :replies_count, :type => Integer, :default => 0
-  field :likes_count, :type => Integer, :default => 0
   # 用户密钥，用于客户端验证
   field :private_token
   field :favorite_topic_ids, :type => Array, :default => []
@@ -46,7 +47,6 @@ class User
   has_many :posts
   has_many :notifications, :class_name => 'Notification::Base', :dependent => :delete
   has_many :photos
-  has_many :likes
 
   def read_notifications(notifications)
     unread_ids = notifications.find_all{|notification| !notification.read?}.map(&:_id)
@@ -60,7 +60,7 @@ class User
   end
 
   attr_accessor :password_confirmation
-  attr_accessible :name, :email, :location, :bio, :website, :github, :tagline, :avatar, :password, :password_confirmation
+  attr_accessible :name, :email, :location, :company, :bio, :website, :github, :twitter, :tagline, :avatar, :password, :password_confirmation
 
   validates :login, :format => {:with => /\A\w+\z/, :message => '只允许数字、大小写字母和下划线'}, :length => {:in => 3..20}, :presence => true, :uniqueness => {:case_sensitive => false}
 
@@ -83,6 +83,16 @@ class User
   def github_url
     return "" if self.github.blank?
     "https://github.com/#{self.github.split('/').last}"
+  end
+
+  def twitter_url
+    return "" if self.twitter.blank?
+    "https://twitter.com/#{self.twitter}"
+  end
+
+  def google_profile_url
+    return "" if self.email.blank? or !self.email.match(/gmail\.com/)
+    return "http://www.google.com/profiles/#{self.email.split("@").first}"
   end
 
   # 是否是管理员
@@ -112,9 +122,9 @@ class User
   # 注册邮件提醒
   after_create :send_welcome_mail
   def send_welcome_mail
-    UserMailer.welcome(self.id).deliver
+    UserMailer.delay.welcome(self.id)
   end
-  
+
   # 保存用户所在城市
   before_save :store_location
   def store_location
@@ -179,18 +189,20 @@ class User
 
   # 收藏东西
   def like(likeable)
-    Like.find_or_create_by(:likeable_id => likeable.id,
-                           :likeable_type => likeable.class,
-                           :user_id => self.id)
+    return false if likeable.blank?
+    return false if likeable.liked_by_user?(self)
+    likeable.push(:liked_user_ids, self.id)
+    likeable.inc(:likes_count, 1)
   end
 
   # 取消收藏
   def unlike(likeable)
-    Like.where(:likeable_id => likeable.id,
-               :likeable_type => likeable.class,
-               :user_id => self.id).destroy
+    return false if likeable.blank?
+    return false if not likeable.liked_by_user?(self)
+    likeable.pull(:liked_user_ids, self.id)
+    likeable.inc(:likes_count, -1)
   end
-  
+
   # 收藏话题
   def favorite_topic(topic_id)
     return false if topic_id.blank?
@@ -199,7 +211,7 @@ class User
     self.push(:favorite_topic_ids, topic_id)
     true
   end
-  
+
   # 取消对话题的收藏
   def unfavorite_topic(topic_id)
     return false if topic_id.blank?

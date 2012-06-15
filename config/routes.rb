@@ -16,6 +16,7 @@ RubyChina::Application.routes.draw do
 
   devise_for :users, :path => "account", :controllers => {
       :registrations => :account,
+      :sessions => :sessions,
       :omniauth_callbacks => "users/omniauth_callbacks"
     } do
     get "account/update_private_token" => "account#update_private_token", :as => :update_private_token_account
@@ -32,7 +33,7 @@ RubyChina::Application.routes.draw do
   end
   resources :notifications, :only => [:index, :destroy] do
     collection do
-      put :mark_all_as_read
+      post :clear
     end
   end
 
@@ -45,24 +46,21 @@ RubyChina::Application.routes.draw do
     member do
       post :reply
       post :favorite
+      post :follow
+      post :unfollow
     end
     collection do
-      get :search
+      get :no_reply
       get :feed
       post :preview
     end
     resources :replies
   end
 
-  resources :photos do
-    collection do
-      get :tiny_new
-    end
-  end
+  resources :photos
   resources :likes
 
   match "/search" => "search#index", :as => :search
-  match "/search/topics" => "search#topics", :as => :search_topics
   match "/search/wiki" => "search#wiki", :as => :search_wiki
 
   namespace :cpanel do
@@ -95,8 +93,4 @@ RubyChina::Application.routes.draw do
   end
 
   mount RubyChina::API => "/"
-
-  if Rails.env.development?
-    mount UserMailer::Preview => 'mails/user'
-  end
 end

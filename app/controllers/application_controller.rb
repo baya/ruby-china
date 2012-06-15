@@ -1,6 +1,11 @@
 # coding: utf-8
 class ApplicationController < ActionController::Base
   protect_from_forgery
+  before_filter :init_page
+
+  def init_page
+    load_unread_notifications_count
+  end
 
   def render_404
     render_optional_error_file(404)
@@ -16,6 +21,14 @@ class ApplicationController < ActionController::Base
       render :template => "/errors/#{status}", :format => [:html], :handler => [:erb], :status => status, :layout => "application"
     else
       render :template => "/errors/unknown", :format => [:html], :handler => [:erb], :status => status, :layout => "application"
+    end
+  end
+
+  def drop_breadcrumb(title=nil, url=nil)
+    title ||= @page_title
+    url ||= url_for
+    if title
+      @breadcrumbs.push(%(<a href="#{url}" itemprop="url"><span itemprop="title">#{title}</span></a>).html_safe)
     end
   end
 
@@ -67,5 +80,11 @@ class ApplicationController < ActionController::Base
         }
       end
     end
+  end
+
+  def load_unread_notifications_count
+    @unread_notify_count = 0
+    return false if current_user.blank?
+    @unread_notify_count = current_user.notifications.unread.count
   end
 end

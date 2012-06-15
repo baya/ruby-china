@@ -69,6 +69,14 @@ SiteConfig.save_default("site_index_html",<<-eos
 eos
 )
 
+# 自定有 HTML head 区域的内容
+SiteConfig.save_default("custom_head_html",<<-eos
+<link rel="dns-prefetch" href="//assets.youhost.com">
+eos
+)
+
+# 要在论坛首页列表隐藏的节点,以逗号隔开
+SiteConfig.save_default("node_ids_hide_in_topics_index","")
 
 # ========================= init Section, Node =========================
 
@@ -98,4 +106,12 @@ eos
 # Node.create(:name => "公告",:summary => "...", :section_id => s6.id)
 # Node.create(:name => "反馈",:summary => "...", :section_id => s6.id)
 # Node.create(:name => "开发",:summary => "...", :section_id => s6.id)
+
+# SiteNode.create(:name => "国内商业网站", :sort => 100)
+# SiteNode.create(:name => "国外著名网站", :sort => 99)
+# SiteNode.create(:name => "Ruby 社区网站", :sort => 98)
+# SiteNode.create(:name => "技术博客", :sort => 97)
+# SiteNode.create(:name => "Ruby 开源项目", :sort => 96)
+# SiteNode.create(:name => "国内企业", :sort => 95)
+# SiteNode.create(:name => "其他", :sort => 94)
 

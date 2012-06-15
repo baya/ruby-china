@@ -13,17 +13,32 @@ module TopicsHelper
       t("topics.has_new_replies")
     end
   end
-  
+
   def topic_favorite_tag(topic)
     return "" if current_user.blank?
-    class_name = "flag"
+    class_name = "bookmark"
     link_title = "收藏"
     if current_user and current_user.favorite_topic_ids.include?(topic.id)
-      class_name = "flaged"
+      class_name = "bookmarked"
       link_title = "取消收藏"
     end
-    
+
     link_to "", "#", :onclick => "return Topics.favorite(this);", 'data-id' => topic.id, :class => "icon small_#{class_name}", :title => link_title, :rel => "twipsy"
+  end
+
+  def topic_follow_tag(topic)
+    return "" if current_user.blank?
+    return "" if topic.blank?
+    return "" if owner?(topic)
+    class_name = "follow"
+    if topic.follower_ids.include?(current_user.id)
+      class_name = "followed"
+    end
+    icon = content_tag("i", "", :class => "icon small_#{class_name}")
+    link_to raw([icon,"关注"].join(" ")), "#", :onclick => "return Topics.follow(this);", 
+                        'data-id' => topic.id, 
+                        'data-followed' => (class_name == "followed"),
+                        :rel => "twipsy"
   end
 
   def render_topic_title(topic)
@@ -40,7 +55,7 @@ module TopicsHelper
   end
 
   def render_topic_created_at(topic)
-    timeago(topic.created_at)
+    timeago(topic.created_at, :class => "published")
   end
 
   def render_topic_last_be_replied_time(topic)
@@ -49,8 +64,8 @@ module TopicsHelper
 
   def render_topic_node_select_tag(topic)
     return if topic.blank?
-    grouped_collection_select :topic, :node_id, Section.all, 
-                    :sorted_nodes, :name, :id, :name, :value => topic.node_id,
-                    :include_blank => true, :prompt => "选择节点"
+    grouped_collection_select :topic, :node_id, Section.all,
+                    :sorted_nodes, :name, :id, :name, {:value => topic.node_id,
+                    :include_blank => true, :prompt => "选择节点"}, :style => "width:145px;"
   end
 end

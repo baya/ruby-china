@@ -1,7 +1,7 @@
 # coding: utf-8
 class RepliesController < ApplicationController
 
-  load_and_authorize_resource :reply
+  load_and_authorize_resource :Reply
 
   before_filter :find_topic
   def create

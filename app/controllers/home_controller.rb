@@ -2,6 +2,6 @@
 class HomeController < ApplicationController
 
   def index
-    redirect_to topics_path unless current_user.blank?
+    drop_breadcrumb("首页", root_path)
   end
 end

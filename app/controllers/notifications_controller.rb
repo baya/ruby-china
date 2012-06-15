@@ -6,6 +6,7 @@ class NotificationsController < ApplicationController
   def index
     @notifications = current_user.notifications.recent.paginate :page => params[:page], :per_page => 20
     current_user.read_notifications(@notifications)
+    drop_breadcrumb("提醒", notifications_path)
     set_seo_meta("提醒")
   end
 
@@ -18,8 +19,8 @@ class NotificationsController < ApplicationController
     end
   end
 
-  def mark_all_as_read
-    current_user.notifications.unread.update_all(:read => true)
+  def clear
+    current_user.notifications.delete_all
     respond_with do |format|
       format.html { redirect_referrer_or_default notifications_path }
       format.js { render :layout => false }

@@ -1,14 +1,15 @@
 # coding: utf-8
 require "bundler/capistrano"
+require "sidekiq/capistrano"
 
 set :application, "ruby-china"
-set :repository,  "git://github.com/huacnlee/ruby-china.git"
+set :repository,  "git://github.com/ruby-china/ruby-china.git"
 set :branch, "master"
 set :scm, :git
 set :user, "ruby"
 set :deploy_to, "/home/#{user}/www/#{application}"
 set :runner, "ruby"
-set :deploy_via, :remote_cache
+# set :deploy_via, :remote_cache
 set :git_shallow_clone, 1
 
 role :web, "58.215.172.218"                          # Your HTTP server, Apache/etc
@@ -43,30 +44,26 @@ end
 task :link_shared_files, :roles => :web do
   run "ln -sf #{deploy_to}/shared/config/*.yml #{deploy_to}/current/config/"
   run "ln -sf #{deploy_to}/shared/config/unicorn.rb #{deploy_to}/current/config/"
-  run "ln -s #{deploy_to}/shared/assets #{deploy_to}/current/public/assets"
-end
-
-task :restart_resque, :roles => :web do
-  run "cd #{deploy_to}/current/; RAILS_ENV=production ./script/resque stop; RAILS_ENV=production ./script/resque start"
-end
-
-task :restart_resque, :roles => :web do
-  run "cd #{deploy_to}/current/; RAILS_ENV=production ./script/resque stop; RAILS_ENV=production ./script/resque start"
+  run "ln -sf #{deploy_to}/shared/config/initializers/secret_token.rb #{deploy_to}/current/config/initializers"
 end
 
 task :mongoid_create_indexes, :roles => :web do
   run "cd #{deploy_to}/current/; RAILS_ENV=production bundle exec rake db:mongoid:create_indexes"
 end
 
-task :compile_assets, :roles => :web do     
-  run "cd #{deploy_to}/current/; bundle exec rake assets:precompile"    
+task :compile_assets, :roles => :web do
+  run "cd #{deploy_to}/current/; RAILS_ENV=production bundle exec rake assets:precompile"
+end
+
+task :sync_assets_to_cdn, :roles => :web do
+  run "cd #{deploy_to}/current/; RAILS_ENV=production bundle exec rake assets:cdn"
 end
 
 task :mongoid_migrate_database, :roles => :web do
   run "cd #{deploy_to}/current/; RAILS_ENV=production bundle exec rake db:migrate"
 end
 
-after "deploy:finalize_update","deploy:symlink", :init_shared_path, :link_shared_files, :compile_assets, :mongoid_create_indexes, :mongoid_migrate_database
+after "deploy:finalize_update","deploy:symlink", :init_shared_path, :link_shared_files, :compile_assets, :sync_assets_to_cdn, :mongoid_migrate_database, 'sidekiq:restart'
 
 
 set :default_environment, {

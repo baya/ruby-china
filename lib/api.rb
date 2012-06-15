@@ -13,15 +13,14 @@ module RubyChina
     # either in post body or query string, named "token"
 
     resource :topics do
+
       # Get active topics list
-      # params[:size] could be specified to limit the results
-      # params[:size]: default is 15, max is 100
+      # params[:page]
+      # params[:per_page]: default is 30
       # Example
-      #   /api/topics/index.json?size=30
+      #   /api/topics/index.json?page=1&per_page=15
       get do
-        @topics = Topic.last_actived
-          .limit(page_size)
-          .includes(:user)
+        @topics = Topic.last_actived.includes(:user).paginate(:page => params[:page], :per_page => params[:per_page]||30)
         present @topics, :with => APIEntities::Topic
       end
 
@@ -69,5 +68,63 @@ module RubyChina
         present Node.all, :with => APIEntities::Node
       end
     end
+
+    # Mark a topic as favorite for current authenticated user
+    # Example
+    # /api/user/favorite/qichunren/8.json?token=232332233223:1
+    resource :user do
+      put "favorite/:user/:topic" do
+        authenticate!
+        current_user.favorite_topic(params[:topic])
+      end
+    end
+
+    resource :users do
+      # Get top 20 hot users
+      # Example
+      # /api/users.json
+      get do
+        @users = User.hot.limit(20)
+        present @users, :with => APIEntities::DetailUser
+      end
+
+      # Get a single user
+      # Example
+      #   /api/users/qichunren.json
+      get ":user" do
+        @user = User.where(:login => /^#{params[:user]}$/i).first
+        present @user, :topics_limit => 5, :with => APIEntities::DetailUser
+      end
+
+
+      # List topics for a user
+      get ":user/topics" do
+        @user = User.where(:login => /^#{params[:user]}$/i).first
+        @topics = @user.topics.recent.limit(page_size)
+        present @topics, :with => APIEntities::UserTopic
+      end
+
+      # List favorite topics for a user
+      get ":user/topics/favorite" do
+        @user = User.where(:login => /^#{params[:user]}$/i).first
+        @topics = Topic.find(@user.favorite_topic_ids)
+        present @topics, :with => APIEntities::Topic
+      end
+    end
+
+    # List all cool sites
+    # Example
+    # GET /api/sites.json
+    resource :sites do
+      get do
+        @site_nodes = SiteNode.all.includes(:sites).desc('sort')
+        @site_nodes.as_json(:except => :sort, :include => {
+          :sites => {
+            :only => [:name, :url, :desc, :favicon, :created_at]
+          }
+        })
+      end
+    end
+
   end
 end
